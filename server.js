@@ -6,6 +6,7 @@ const axios = require('axios');
 const withAuth = require('./withAuth.js');
 const github = require('octonode');
 const Git = require("nodegit");
+const fs = require('fs')
 
 
 const app = express();
@@ -31,19 +32,22 @@ app.use(morgan("dev"));
 //     next();
 // });
 
+
 async function CreateRepo() {
   const client = github.client(`${process.env.GITHUB_TOKEN}`);
   var me = client.me();
 
   me.repo({
-    "name": "Hello-World",
+    "name": "TestWorld",
     "description": "This is your first repo",
+    "auto_init": "true"
   }, function (err, data, headers) {
     console.log('error:' + err);
     console.log('data:' + data)
   });
   // const result = await me.forkAsync('SanDiegoCodeSchool/mobtimer-react')
   // console.log(result);
+
 }
 async function EditRepo() {
   const client = github.client(`${process.env.GITHUB_TOKEN}`);
@@ -77,7 +81,7 @@ async function CloneRepo() {
       // Access any repository methods here.
       console.log(repository)
       Git.Repository.open("tmp").then(function (repo) {
-        console.log(repo,'REPO')
+        console.log(repo, 'REPO')
       });
       // console.log("Is the repository bare? %s", Boolean(repository.isBare()));
     });
@@ -89,38 +93,48 @@ app.get('/', withAuth, (req, res) => {
 });
 
 app.post('/github', withAuth, async (req, res) => {
+  const filepath = './tmp/server/index.js';
+  const file_buffer = fs.readFileSync(filepath);
+  const contents_in_base64 = file_buffer.toString('base64');
+
+
+  let config = {
+    headers: {
+      Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+      accept: 'application/vnd.github.v3+json'
+    }
+  }
+
+  let data = {
+    content: contents_in_base64,
+    encoding: 'base64'
+  }
   const repoString = req.body.repo;
+  let refData;
+  let headData;
+  let blobSha;
 
-  // const headers = {
-  //   headers: {
-  //     "Authorization": `Bearer ${process.env.GITHUB_TOKEN}`,
-  //     "Content-Type": "application/json"
-  //   }
-  // };
 
-  // let github = await axios.get('https://api.github.com/user/repos', headers);
-  // console.log(github, 'yoyo');
-  // res.status(200);
+  axios.get('https://api.github.com/repos/DiegosPlayground/TestWorld/git/refs')
+    .then(response => {
+      refData = response.data[0].object;
+      return axios.get(refData.url)
+    })
+    .then(response => {
+      headData = response.data;
+    })
+    .catch(err => console.log(err))
+    .catch(error => console.log(error, 'error'))
 
-  // var client = github.client(`${process.env.GITHUB_TOKEN}`);
-  // var me = client.me()
-  // me.fork('SanDiegoCodeSchool/mobtimer-react', (err) => {
-    // var ghrepo = client.repo('DiegosPlayground/mobtimer-react');
-    // ghrepo.update({
-    //   name: 'test123'
-    // } .catch(err => console.log(err)))
-  // });
+  axios.post('https://api.github.com/repos/DiegosPlayground/TestWorld/git/blobs', data, config)
+    .then(response => {
+      blobSha = response.data.sha
+      console.log(response)
+    })
+    .catch(err => console.log(err))
 
-  // client.get('/user', {}, function (err, status, body, headers) {
-  //   console.log(body); //json object
-  // });
-  
-  // CreateRepo();
-  // CloneRepo();
-  var pathToRepo = require("path").resolve("./tmp");
-    Git.Repository.open(pathToRepo).then(function (repo) {
-      console.log(repo.length())
-  })
+  res.status(200).send('working');
+
 });
 
 module.exports = app;
